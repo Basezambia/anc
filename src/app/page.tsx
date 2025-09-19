@@ -7,7 +7,6 @@ import AncestryPieChart, { AncestryDatum } from "../components/AncestryPieChart"
 import { FaFilePdf, FaTwitter, FaFacebook, FaShare, FaPlus } from "react-icons/fa";
 import { chartToImage } from "../utils/chartToImage";
 import {
-  useWalletContext,
   Wallet,
   ConnectWallet,
   WalletDropdown,
@@ -15,12 +14,12 @@ import {
   WalletDropdownDisconnect,
   ConnectWalletText,
 } from '@coinbase/onchainkit/wallet';
-import { Address, Avatar, Name, Identity, EthBalance } from '@coinbase/onchainkit/identity';
-import { Checkout, CheckoutButton, CheckoutStatus } from '@coinbase/onchainkit/checkout';
+import { Address, Avatar, Name, Identity } from '@coinbase/onchainkit/identity';
+import { Checkout, CheckoutButton, CheckoutStatus, type LifecycleStatus } from '@coinbase/onchainkit/checkout';
 import { motion } from 'framer-motion';
 // Import useAccount from wagmi to properly detect wallet connection
 import { useAccount } from 'wagmi';
-import { FundButton, getOnrampBuyUrl } from '@coinbase/onchainkit/fund';
+import { getOnrampBuyUrl } from '@coinbase/onchainkit/fund';
 
 const PRODUCT_ID = process.env.NEXT_PUBLIC_PRODUCT_ID || 'ca407516-32fd-4113-8d1a-c997c1b1a7ec';
 
@@ -102,20 +101,38 @@ export default function Home() {
     }
   }, [address]);
   
-  // Keep the OnchainKit wallet context for other wallet features
-  const walletCtx = useWalletContext();
-  
   const [image, setImage] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [result, setResult] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState(0);
-  const [step, setStep] = useState<'upload' | 'processing' | 'result'>('upload');
+  const [step, setStep] = useState<'upload' | 'payment' | 'processing' | 'result'>('upload');
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [showShareModal, setShowShareModal] = useState(false);
   const [fadeOut, setFadeOut] = useState(false);
   const [ancestryData, setAncestryData] = useState<AncestryDatum[]>([]);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
+
+  const onrampBuyUrl = React.useMemo(() => {
+    if (!address) return null;
+    const projectId = process.env.NEXT_PUBLIC_CDP_PROJECT_ID || '';
+    if (!projectId) return null;
+
+    try {
+      return getOnrampBuyUrl({
+        projectId,
+        addresses: { [address]: ['base'] },
+        assets: ['USDC'],
+        presetFiatAmount: 20,
+        fiatCurrency: 'USD',
+      });
+    } catch (err) {
+      console.error('Failed to build onramp URL', err);
+      return null;
+    }
+  }, [address]);
 
   // Add mounted state to prevent hydration issues
   useEffect(() => {
@@ -133,6 +150,8 @@ export default function Home() {
       setAncestryData([]);
       setCarouselIndex(0);
       setShowShareModal(false);
+      setPendingFile(null);
+      setPaymentStatus('idle');
     }
   }, [isConnected]);
 
@@ -154,7 +173,9 @@ export default function Home() {
     
     // Start analysis immediately after upload
     await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for better UX
-    triggerAnalysis(file);
+    setPendingFile(file);
+    setPaymentStatus('idle');
+    setStep('payment');
   };
 
   // Removed reveal button functionality since analysis starts automatically
@@ -255,6 +276,8 @@ export default function Home() {
     setImage(null);
     setResult("");
     setFadeOut(false);
+    setPendingFile(null);
+    setPaymentStatus('idle');
   };
 
   const formattedCards = splitResultCards(cleanAndFormatResult(result));
@@ -388,10 +411,11 @@ export default function Home() {
       console.log('[PAYMENT DEBUG] Analysis already triggered, ignoring duplicate call');
       return;
     }
-    
+
     analysisTriggeredRef.current = true;
     setStep('processing');
     triggerAnalysis(file);
+    setPendingFile(null);
   }, []);
   
   // Reset the analysis triggered flag when returning to upload step
@@ -401,8 +425,34 @@ export default function Home() {
     }
   }, [step]);
 
-  // We've removed all other payment detection methods and will rely solely on
-  // the onStatus handler from the Checkout component
+  const handleCheckoutStatus = React.useCallback((status: LifecycleStatus) => {
+    if (status.statusName === 'pending' || status.statusName === 'ready' || status.statusName === 'fetchingData') {
+      setPaymentStatus('pending');
+      return;
+    }
+
+    if (status.statusName === 'success') {
+      setPaymentStatus('success');
+      if (pendingFile) {
+        safeTriggerAnalysis(pendingFile);
+      }
+      return;
+    }
+
+    if (status.statusName === 'error') {
+      setPaymentStatus('error');
+      return;
+    }
+
+    setPaymentStatus('idle');
+  }, [pendingFile, safeTriggerAnalysis]);
+
+  useEffect(() => {
+    if (step === 'payment' && !pendingFile) {
+      setStep('upload');
+      setPaymentStatus('idle');
+    }
+  }, [pendingFile, step]);
 
   return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-[#f8f9fa] to-[#e5e7eb] py-12 relative">
@@ -412,10 +462,11 @@ export default function Home() {
             <ConnectWallet
               className={`ock-connect-glass px-4 py-2 rounded-full font-bold text-white text-base shadow-lg border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-700/80 backdrop-blur-lg bg-opacity-70 hover:bg-gray-900/80 transition-all duration-200 focus:outline-none ${isConnected ? 'from-green-600 to-indigo-600 border-green-400/30' : 'from-indigo-600 to-green-600 border-indigo-500/30'}`}
               disconnectedLabel="Connect Wallet"
+              aria-label={isConnected ? 'Open wallet menu' : 'Connect wallet'}
             >
               {isConnected && (
                 <div className="mr-2 relative">
-                  <motion.div 
+                  <motion.div
                     animate={{ scale: [1, 1.5, 1] }}
                     transition={{ repeat: Infinity, duration: 2 }}
                     className="absolute w-2 h-2 bg-green-400 rounded-full right-0 top-0 opacity-70"
@@ -425,9 +476,9 @@ export default function Home() {
               )}
               <Avatar className="h-6 w-6" />
               <ConnectWalletText>
-                {isConnected ? '' : 'Connect Wallet'}
+                {isConnected ? 'My Wallet' : 'Connect Wallet'}
               </ConnectWalletText>
-              <Name className="font-medium" />
+              <Name className="font-medium ml-2 hidden sm:inline" />
             </ConnectWallet>
             <WalletDropdown>
               <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
@@ -439,32 +490,21 @@ export default function Home() {
                 className="py-3 rounded-xl flex items-center bg-white/10 hover:bg-white/20 text-black font-medium pl-4 pr-2 my-1 transition-all duration-200 hover:shadow-lg hover:translate-y-[-2px]"
                 icon="wallet"
                 href="https://keys.coinbase.com"
+                target="_blank"
+                rel="noreferrer"
               >
                 Wallet
               </WalletDropdownLink>
-              {(() => {
-  const projectId = process.env.NEXT_PUBLIC_CDP_PROJECT_ID || '';
-  const { address } = useAccount();
-  if (!address) return null; // Only show FundButton if address is present
-  const onrampBuyUrl = getOnrampBuyUrl({
-    projectId,
-    addresses: { [address]: ['base'] },
-    assets: ['USDC'],
-    presetFiatAmount: 20,
-    fiatCurrency: 'USD',
-    // Optionally, set redirectUrl: window.location.origin
-  });
-  return (
-    <button
-      type="button"
-      className="w-full py-3 rounded-xl flex items-center justify-start bg-white/10 hover:bg-white/20 text-black font-medium transition-all duration-200 my-1 pl-4 pr-2 hover:shadow-lg hover:translate-y-[-2px]"
-      onClick={() => window.open(onrampBuyUrl, '_blank', 'noopener,noreferrer')}
-    >
-      <FaPlus className="mr-3 text-xl" />
-      <span>Funds</span>
-    </button>
-  );
-})()}
+              {onrampBuyUrl && (
+                <button
+                  type="button"
+                  className="w-full py-3 rounded-xl flex items-center justify-start bg-white/10 hover:bg-white/20 text-black font-medium transition-all duration-200 my-1 pl-4 pr-2 hover:shadow-lg hover:translate-y-[-2px]"
+                  onClick={() => window.open(onrampBuyUrl, '_blank', 'noopener,noreferrer')}
+                >
+                  <FaPlus className="mr-3 text-xl" />
+                  <span>Add Funds</span>
+                </button>
+              )}
               <div className="pt-2 pb-2">
                 <WalletDropdownDisconnect className="w-full bg-white/10 hover:bg-white/20 text-black font-medium py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:translate-y-[-2px]" />
               </div>
@@ -535,18 +575,15 @@ export default function Home() {
                               setImage(null);
                               setResult("");
                               setError("");
+                              setPendingFile(null);
+                              setPaymentStatus('idle');
+                              setStep('upload');
                             }
                           }}
                           title={image ? 'Click to upload a new image' : undefined}
                         >
                           <UploadArea
-                            onDrop={async (files) => {
-                              const file = files[0];
-                              setImage(file);
-                              // Start analysis immediately after image is set
-                              await new Promise(resolve => setTimeout(resolve, 100));
-                              triggerAnalysis(file);
-                            }}
+                            onDrop={handleDrop}
                             isUploading={loading}
                             hasFile={!!image}
                             imageUrl={imageUrl || undefined}
@@ -573,6 +610,49 @@ export default function Home() {
                   </div>
                 </div>
                 <p className="text-gray-400 text-base mt-2">Please wait while we analyze your image for ancestry features.</p>
+              </div>
+            )}
+            {step === 'payment' && pendingFile && (
+              <div className="w-full max-w-2xl mx-auto flex justify-center">
+                <div className="openai-card flex flex-col items-center animate-fade-in text-center w-full max-w-lg mx-auto p-6 bg-[#23252b]/85 rounded-[2.5rem] border border-indigo-500/20">
+                  <h2 className="text-2xl font-bold text-white mb-2">Complete Payment to Continue</h2>
+                  <p className="text-gray-300 text-sm mb-6 max-w-md">
+                    To start your personalized ancestry reading, please confirm a <span className="text-indigo-300 font-semibold">0.5&nbsp;USDC</span> payment using Base Pay. Once the payment is successful your analysis will begin automatically.
+                  </p>
+                  <div className="w-full bg-black/30 rounded-2xl p-4 border border-white/10 mb-6 text-left text-sm text-gray-200">
+                    <p className="font-semibold text-white mb-1">Uploaded Image</p>
+                    <p className="text-gray-300">{pendingFile.name}</p>
+                    <p className="text-gray-400 mt-2">Size: {(pendingFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+                  </div>
+                  <Checkout
+                    productId={PRODUCT_ID}
+                    onStatus={handleCheckoutStatus}
+                  >
+                    <CheckoutButton
+                      coinbaseBranded
+                      text={paymentStatus === 'pending' ? 'Processing Payment...' : 'Pay 0.5 USDC with Base Pay'}
+                      className="w-full py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90 rounded-full shadow-lg font-medium text-white"
+                      disabled={paymentStatus === 'pending'}
+                    />
+                    <CheckoutStatus className="text-sm text-gray-300" />
+                  </Checkout>
+                  {paymentStatus === 'error' && (
+                    <div className="mt-4 w-full bg-red-500/20 border border-red-400/50 text-red-200 text-sm rounded-xl p-3">
+                      Payment failed. Please try again or reconnect your wallet.
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="mt-6 text-xs text-gray-400 hover:text-gray-200 underline"
+                    onClick={() => {
+                      setStep('upload');
+                      setPendingFile(null);
+                      setPaymentStatus('idle');
+                    }}
+                  >
+                    Choose a different image
+                  </button>
+                </div>
               </div>
             )}
             {/* Always render result panel, only show content if step is 'result' */}
