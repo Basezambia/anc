@@ -120,18 +120,18 @@ export async function POST(req: NextRequest) {
       try {
         errorText = await apiRes.text();
         console.error('OpenAI API error:', errorText);
-      } catch (e) {
+      } catch (apiError) {
         errorText = 'Failed to get error details from OpenAI API';
-        console.error(errorText);
+        console.error(errorText, apiError);
       }
       return NextResponse.json({ error: errorText }, { status: 500 });
     }
-    
+
     let data;
     try {
       data = await apiRes.json();
-    } catch (e) {
-      console.error('Failed to parse OpenAI API response:', e);
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI API response:', parseError);
       return NextResponse.json({ error: 'Failed to parse API response' }, { status: 500 });
     }
     

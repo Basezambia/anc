@@ -18,7 +18,7 @@ export async function chartToImage(element: HTMLElement): Promise<string> {
     await new Promise(resolve => setTimeout(resolve, 1500));
     
     // Force a reflow to ensure the element is fully rendered
-    element.offsetHeight;
+    void element.offsetHeight;
     
     // Get the canvas element inside the chart container
     const canvas = element.querySelector('canvas');

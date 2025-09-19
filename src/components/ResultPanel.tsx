@@ -4,9 +4,15 @@ import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
 import { FaTwitter, FaFacebook, FaFilePdf } from "react-icons/fa";
 import AncestryPieChart, { AncestryDatum } from "./AncestryPieChart";
-import { downloadAnalysisAsPDF } from "../utils/pdfUtils";
 import DNALogo from "./DNALogo";
 import { chartToImage } from "../utils/chartToImage";
+
+declare global {
+  interface Window {
+    currentChartDataUrl?: string;
+    currentAncestryData?: AncestryDatum[];
+  }
+}
 
 interface ResultPanelProps {
   loading: boolean;
@@ -97,51 +103,12 @@ export default function ResultPanel({
   // Export the chart data URL for consumption by the parent component
   useEffect(() => {
     // This allows the parent component to get the latest chart data URL for PDF generation
-    if (pieChartDataUrl && ancestryPieData.length > 0) {
-      if (window) {
-        (window as any).currentChartDataUrl = pieChartDataUrl;
-        (window as any).currentAncestryData = ancestryPieData;
-        console.log('Chart data URL available for PDF generation');
-      }
+    if (pieChartDataUrl && ancestryPieData.length > 0 && typeof window !== 'undefined') {
+      window.currentChartDataUrl = pieChartDataUrl;
+      window.currentAncestryData = ancestryPieData;
+      console.log('Chart data URL available for PDF generation');
     }
   }, [pieChartDataUrl, ancestryPieData]);
-
-  const handleDownloadPDF = () => {
-    if (!result) return;
-    
-    if (ancestryPieData.length > 0) {
-      // Try one more capture if we don't have a chart URL yet
-      if (!pieChartDataUrl && pieChartRef.current !== null) {
-        try {
-          const chartElement = pieChartRef.current.querySelector('.ancestry-pie-chart-capture');
-          if (chartElement) {
-            chartToImage(chartElement as HTMLElement).then(url => {
-              if (url && url.startsWith('data:image/png;base64,')) {
-                // Use the newly captured URL directly
-                downloadAnalysisAsPDF(result, ancestryPieData, url);
-              } else {
-                // Fallback if capture fails
-                downloadAnalysisAsPDF(result, ancestryPieData);
-              }
-            }).catch(() => {
-              downloadAnalysisAsPDF(result, ancestryPieData);
-            });
-          } else {
-            downloadAnalysisAsPDF(result, ancestryPieData);
-          }
-        } catch (err) {
-          console.error('Last-minute chart capture failed:', err);
-          downloadAnalysisAsPDF(result, ancestryPieData);
-        }
-      } else {
-        // Use previously captured URL
-        downloadAnalysisAsPDF(result, ancestryPieData, pieChartDataUrl || undefined);
-      }
-    } else {
-      // No chart data at all
-      downloadAnalysisAsPDF(result, []);
-    }
-  };
 
   return (
     <div className="bg-gradient-to-br from-[#23252b] to-[#18191a] rounded-2xl p-4 sm:p-6 md:p-8 flex flex-col items-center justify-center shadow-2xl w-full max-w-[420px] md:max-w-[480px] min-h-[340px] md:min-h-[420px] mx-auto animate-fade-in">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, useWalletContext } from '@coinbase/onchainkit/wallet';
+import { Wallet } from '@coinbase/onchainkit/wallet';
 import { useAccount } from 'wagmi';
 
 export default function WalletGate({ children }: { children: React.ReactNode }) {

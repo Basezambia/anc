@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import Image from "next/image";
 import { useDropzone } from "react-dropzone";
 import { FaCloudUploadAlt } from "react-icons/fa";
 import styles from './UploadArea.module.css';
@@ -12,7 +13,7 @@ interface UploadAreaProps {
 }
 
 const UploadArea: React.FC<UploadAreaProps> = ({ onDrop, isUploading, hasFile, imageUrl }) => {
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps } = useDropzone({
     accept: { "image/*": [] },
     multiple: false,
     onDrop,
@@ -37,9 +38,13 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onDrop, isUploading, hasFile, i
         imageUrl ? (
           <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%'}}>
             <div style={{ position: 'relative', width: '100%', height: '325px', borderRadius: '2.5rem', overflow: 'hidden', border: '2.5px solid #e5e7eb', transition: 'all 0.25s cubic-bezier(.4,2,.6,1)' }}>
-              <img
+              <Image
+                src={imageUrl}
                 alt="Uploaded preview"
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 1 }}
+                fill
+                style={{ objectFit: 'cover', zIndex: 1 }}
+                sizes="(max-width: 768px) 100vw, 600px"
+                priority
               />
               {/* Overlay content goes here (e.g. Pay button) */}
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>

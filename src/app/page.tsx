@@ -21,6 +21,12 @@ import { motion } from 'framer-motion';
 import { useAccount } from 'wagmi';
 import { getOnrampBuyUrl } from '@coinbase/onchainkit/fund';
 
+declare global {
+  interface Window {
+    aiAncestryUserName?: string;
+  }
+}
+
 const PRODUCT_ID = process.env.NEXT_PUBLIC_PRODUCT_ID || 'ca407516-32fd-4113-8d1a-c997c1b1a7ec';
 
 // Utility: Clean and format the result for better readability
@@ -81,7 +87,7 @@ function splitResultCards(text: string): string[] {
 
 export default function Home() {
   // MiniKit integration
-  const { setFrameReady, isFrameReady, context } = useMiniKit();
+  const { setFrameReady, isFrameReady } = useMiniKit();
   
   // Use wagmi's useAccount hook for reliable wallet connection detection
   const { isConnected, address } = useAccount();
@@ -97,7 +103,7 @@ export default function Home() {
   // Set global user name for PDF generation
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      (window as any).aiAncestryUserName = address || '';
+      window.aiAncestryUserName = address || '';
     }
   }, [address]);
   
@@ -178,9 +184,6 @@ export default function Home() {
     setStep('payment');
   };
 
-  // Removed reveal button functionality since analysis starts automatically
-  const handleReveal = () => {};
-
   const triggerAnalysis = (file: File) => {
     setLoading(true);
     setProgress(10);
@@ -258,6 +261,9 @@ export default function Home() {
   };
 
   const handleShare = (platform: 'twitter' | 'facebook' | 'copy') => {
+    if (typeof window === 'undefined') {
+      return;
+    }
     const url = encodeURIComponent(window.location.href);
     const message = encodeURIComponent("I just discovered my ancestry using this new AI app!");
     if (platform === 'twitter') {
@@ -570,7 +576,7 @@ export default function Home() {
                             transition: 'opacity 0.4s',
                             position: 'relative',
                           }}
-                          onClick={e => {
+                          onClick={() => {
                             if (image) {
                               setImage(null);
                               setResult("");
