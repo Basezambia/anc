@@ -1,626 +1,346 @@
-"use client";
-import React, { useState, useEffect } from "react";
-import { useMiniKit } from '@coinbase/onchainkit/minikit';
-import UploadArea from "../components/UploadArea";
-// import PremiumUploadArea from "../components/PremiumUploadArea";
-import AncestryPieChart, { AncestryDatum } from "../components/AncestryPieChart";
-import { FaFilePdf, FaTwitter, FaFacebook, FaShare, FaPlus } from "react-icons/fa";
-import { chartToImage } from "../utils/chartToImage";
-import {
-  useWalletContext,
-  Wallet,
-  ConnectWallet,
-  WalletDropdown,
-  WalletDropdownLink,
-  WalletDropdownDisconnect,
-  ConnectWalletText,
-} from '@coinbase/onchainkit/wallet';
-import { Address, Avatar, Name, Identity, EthBalance } from '@coinbase/onchainkit/identity';
-import { Checkout, CheckoutButton, CheckoutStatus } from '@coinbase/onchainkit/checkout';
-import { motion } from 'framer-motion';
-// Import useAccount from wagmi to properly detect wallet connection
-import { useAccount } from 'wagmi';
-import { FundButton, getOnrampBuyUrl } from '@coinbase/onchainkit/fund';
+import Link from "next/link";
+import { FiArrowRight, FiUploadCloud, FiCpu, FiGitBranch } from "react-icons/fi";
+import { BuilderPreview } from "../components/BuilderPreview";
+import { StackStrategyTabs, type StackStrategy } from "../components/StackStrategyTabs";
+import { ComponentLibrary } from "../components/ComponentLibrary";
+import { WorkflowConsole } from "../components/WorkflowConsole";
+import { SecurityChecklist } from "../components/SecurityChecklist";
+import { MilestoneTimeline } from "../components/MilestoneTimeline";
+import { SectionHeading } from "../components/SectionHeading";
+import { PillBadge } from "../components/PillBadge";
 
-const PRODUCT_ID = process.env.NEXT_PUBLIC_PRODUCT_ID || 'ca407516-32fd-4113-8d1a-c997c1b1a7ec';
+const builderComponents = [
+  {
+    id: "wallet",
+    name: "Wallet",
+    description: "Adds Connect Wallet, dropdown, and identity banner",
+    preview:
+      "On drop, the agent wraps your app with OnchainKitProvider, installs wagmi + viem, and injects a responsive Wallet modal wherever you placed it.",
+  },
+  {
+    id: "pay",
+    name: "Base Pay",
+    description: "Accept USDC on Base with one click",
+    preview:
+      "Server actions spin up pay() calls, success webhooks write receipts, and the UI renders a Base Pay button that respects live/test modes.",
+  },
+  {
+    id: "swap",
+    name: "Swap",
+    description: "Let users trade without leaving the mini-app",
+    preview:
+      "The Swap widget mounts with prefilled pairs, sets RPCs, and logs lifecycle events to your analytics bus.",
+  },
+  {
+    id: "mint",
+    name: "Mint",
+    description: "Spin up gated mints or collectibles",
+    preview:
+      "Templates generate mint pages with attestation checks, metadata forms, and callbacks for fulfillment.",
+  },
+];
 
-// Utility: Clean and format the result for better readability
-function cleanAndFormatResult(raw: string): string {
-  // Remove any previous disclaimers or boilerplate before 'YOUR PREDICTED ROOTS ARE:'
-  const idx = raw.indexOf('YOUR PREDICTED ROOTS ARE:');
-  let cleaned = idx !== -1 ? raw.slice(idx) : raw;
+const stackStrategies: StackStrategy[] = [
+  {
+    id: "static",
+    title: "Static HTML",
+    description: "Wrap legacy sites with a lightweight Vite shell and React islands for Base widgets.",
+    highlights: [
+      "Detect HTML uploads, scaffold Vite + React adapter layer",
+      "Inject <script type='module'> mount points with safe hydration",
+      "Use WalletConnect EIP-1193 provider for multi-wallet support",
+    ],
+    codePlan: [
+      "Create vite.config + entry to hydrate islands",
+      "Install @base-org/onchainkit and provider shim",
+      "Add Wallet/Pay mounts targeting data-component anchors",
+      "Emit .env.example with Base RPC + keys",
+    ],
+  },
+  {
+    id: "react",
+    title: "React / Vite / CRA",
+    description: "Patch existing React trees with providers, routes, and hooks.",
+    highlights: [
+      "Add OnchainKitProvider at the root with Base + WalletConnect",
+      "Update router to include Checkout success/cancel routes",
+      "Guard client-only widgets with lazy imports to avoid SSR issues",
+    ],
+    codePlan: [
+      "Detect package manager + install @base-org/onchainkit, wagmi, viem",
+      "Wrap src/main.tsx with providers",
+      "Insert component JSX at drop target via AST codemod",
+      "Write checklist + diff summary for review",
+    ],
+  },
+  {
+    id: "next",
+    title: "Next.js (App Router)",
+    description: "Lean on server actions + route handlers for secure payments.",
+    highlights: [
+      "Update app/layout.tsx with provider + theme",
+      "Generate app/actions/pay.ts server action for Base Pay",
+      "Add middleware for route protection when payments required",
+    ],
+    codePlan: [
+      "Add provider + theme to layout",
+      "Create Base Pay action + success webhook",
+      "Inject Wallet/Pay components into selected segment",
+      "Prompt for env: BASE_RPC_URL, BASE_PAY_PUBLIC_KEY, WALLETCONNECT_PROJECT_ID",
+    ],
+  },
+  {
+    id: "vue",
+    title: "Vue / Svelte / Others",
+    description: "Mount a micro React host or ship Web Component wrappers.",
+    highlights: [
+      "Bundle React island exposed as <base-kit-widget>",
+      "Map props/events to the host framework",
+      "Document handshake so teams can extend the bridge",
+    ],
+    codePlan: [
+      "Generate wrapper package inside project",
+      "Install peer deps scoped to the wrapper",
+      "Inject custom element into selected template",
+      "Add typed events + usage docs",
+    ],
+  },
+];
 
-  // Remove any explicit 'SUMMARY TABLE' heading or similar on card 1/2
-  cleaned = cleaned.replace(/\n?-?\s*SUMMARY TABLE\s*-?\n?/gi, '\n');
+const libraryComponents = [
+  {
+    name: "Wallet",
+    category: "Identity",
+    summary: "Modal connect flow with dropdown, ENS/avatar, and network guardrails.",
+    actions: [
+      "Installs @base-org/onchainkit, wagmi, viem",
+      "Configures providers + WalletConnect project id",
+      "Injects <Wallet /> and updates layout copy",
+    ],
+  },
+  {
+    name: "Base Pay",
+    category: "Payments",
+    summary: "USDc acceptance with lifecycle callbacks and analytics hooks.",
+    actions: [
+      "Creates pay() server utilities or REST handler",
+      "Adds success/cancel routes with status UI",
+      "Prompts env for API keys + testnet toggles",
+    ],
+  },
+  {
+    name: "Swap",
+    category: "DeFi",
+    summary: "Configurable swap widget tuned for Base liquidity pairs.",
+    actions: [
+      "Sets default tokens + slippage controls",
+      "Persists analytics events to project log",
+      "Surfaces fallback copy for unsupported regions",
+    ],
+  },
+  {
+    name: "Tokens",
+    category: "Data",
+    summary: "Show wallet balances, onchain activity, and gated content slots.",
+    actions: [
+      "Adds GraphQL queries via Base data APIs",
+      "Maps balances into cards with sorting + filters",
+      "Caches responses in react-query for instant reloads",
+    ],
+  },
+  {
+    name: "Mint",
+    category: "Commerce",
+    summary: "Launch collectibles or passes with attestation gates.",
+    actions: [
+      "Generates mint API + metadata storage hooks",
+      "Creates admin-only edit form for supply + price",
+      "Links drop lifecycle into workflow console",
+    ],
+  },
+  {
+    name: "Automation",
+    category: "Agent Tools",
+    summary: "Run multi-step codemods, package installs, and schema updates.",
+    actions: [
+      "Detects repo layout + package manager",
+      "Runs dry-run diffs before applying",
+      "Commits to session branch with PR summary",
+    ],
+  },
+];
 
-  // Replace markdown headings with styled equivalents
-  cleaned = cleaned.replace(/###?\s*/g, '\n\n');
-  
-  // Bold important terms
-  cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '<span class="font-bold">$1</span>');
-  
-  // Remove any standalone numbers that might appear in the text (like 1. 2. 3.)
-  cleaned = cleaned.replace(/^(\d+\.\s)$/gm, '');
-  cleaned = cleaned.replace(/\n(\d+\.\s)\n/g, '\n\n');
-  
-  // Numbered headings for sections - only keep those with text after the number
-  cleaned = cleaned.replace(/(\d+\.\s)([A-Za-z])/g, '<br/><span class="text-blue-500 font-bold">$1</span>$2');
-  
-  // Replace - bullets with •
-  cleaned = cleaned.replace(/\n- /g, '\n• ');
-  
-  // Remove standalone dash symbols that aren't part of words
-  cleaned = cleaned.replace(/([^\w-])-(\ |$)/g, '$1$2');
-  cleaned = cleaned.replace(/(^|\s)-([^\w-])/g, '$1$2');
-  
-  // Remove excessive line breaks
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+const workflowSteps = [
+  {
+    id: 1,
+    title: "Unpack upload & detect framework",
+    summary: "Stack detector scans package.json, lockfiles, configs, and infers package manager + framework.",
+    status: "success" as const,
+  },
+  {
+    id: 2,
+    title: "Plan component insertion",
+    summary: "Agent builds a step plan: packages, provider edits, routes, env prompts, and dry-run diff.",
+    status: "running" as const,
+  },
+  {
+    id: 3,
+    title: "Apply diff & run preview build",
+    summary: "Ephemeral sandbox installs deps, runs lint/tests, and posts artifacts back to the UI.",
+    status: "ready" as const,
+  },
+];
 
-  // Add blank lines before bullets
-  cleaned = cleaned.replace(/([^.])\n• /g, '$1\n\n• ');
-  cleaned = cleaned.replace(/^• /gm, '\n• ');
-  cleaned = cleaned.replace(/\n\n\n+/g, '\n\n');
-  cleaned = cleaned.replace(/^\n+/, '');
+const safeguards = [
+  {
+    title: "Ephemeral sandboxes",
+    detail: "Firecracker-backed containers boot per run with outbound allow-lists and auto-teardown.",
+  },
+  {
+    title: "Secret vault",
+    detail: "Env vars never hit the repo. Server-only keys are scoped per run and redacted from logs.",
+  },
+  {
+    title: "Change tracking",
+    detail: "Every agent action produces a diff, commit message, and human-readable summary before merge.",
+  },
+  {
+    title: "Observability",
+    detail: "Structured logs + metrics let you replay steps or run them in parallel Opal-style.",
+  },
+];
 
-  // Ensure there is always a blank line before any bolded section heading (even at start of line)
-  cleaned = cleaned.replace(/([^\n])\n(<span class=\"font-bold\">[^<]+<\/span>)/g, '$1\n\n$2'); // after any char except \n
-  // Also, if a bolded heading is immediately after a bullet (• ...\n<span...), ensure a blank line
-  cleaned = cleaned.replace(/(• [^\n]+)\n(<span class=\"font-bold\">)/g, '$1\n\n$2');
-
-  return cleaned;
-}
-
-function splitResultCards(text: string): string[] {
-  const paras = text.split(/\n\s*\n|\n/).filter(Boolean);
-  const chunkSize = Math.ceil(paras.length / 3);
-  return [
-    paras.slice(0, chunkSize).join('\n'),
-    paras.slice(chunkSize, chunkSize * 2).join('\n'),
-    paras.slice(chunkSize * 2).join('\n'),
-  ];
-}
+const milestones = [
+  {
+    phase: "MVP",
+    timeline: "Weeks 1-2",
+    focus: [
+      "Upload → detect → preview for Static/React/Next",
+      "Drag-drop Wallet with provider wiring",
+      "One-click mini-app template on Base Sepolia",
+    ],
+    outcome: "A working builder where users can upload a site and drop in Wallet/Pay primitives with env prompts.",
+  },
+  {
+    phase: "Expansion",
+    timeline: "Weeks 3-4",
+    focus: [
+      "Base Pay drag-drop with lifecycle webhooks",
+      "WalletConnect/Reown provider support",
+      "Media library + content mapping",
+    ],
+    outcome: "Teams can accept payments, top-up funds, and map media into their site without manual edits.",
+  },
+  {
+    phase: "DX & Scale",
+    timeline: "Weeks 5-6",
+    focus: [
+      "Visual step debugger + parallel runs",
+      "Branch-based versioning + rollback",
+      "Vue/Svelte adapters via Web Components",
+    ],
+    outcome: "Opal-style debugging with multi-framework reach and production-ready workflows.",
+  },
+];
 
 export default function Home() {
-  // MiniKit integration
-  const { setFrameReady, isFrameReady, context } = useMiniKit();
-  
-  // Use wagmi's useAccount hook for reliable wallet connection detection
-  const { isConnected, address } = useAccount();
-  const [mounted, setMounted] = useState(false);
-  
-  // MiniKit frame ready setup
-  useEffect(() => {
-    if (!isFrameReady) {
-      setFrameReady();
-    }
-  }, [setFrameReady, isFrameReady]);
-  
-  // Set global user name for PDF generation
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).aiAncestryUserName = address || '';
-    }
-  }, [address]);
-  
-  // Keep the OnchainKit wallet context for other wallet features
-  const walletCtx = useWalletContext();
-  
-  const [image, setImage] = useState<File | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [result, setResult] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [progress, setProgress] = useState(0);
-  const [step, setStep] = useState<'upload' | 'processing' | 'result'>('upload');
-  const [carouselIndex, setCarouselIndex] = useState(0);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [fadeOut, setFadeOut] = useState(false);
-  const [ancestryData, setAncestryData] = useState<AncestryDatum[]>([]);
-
-  // Add mounted state to prevent hydration issues
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Sync step on wallet connect/disconnect
-  useEffect(() => {
-    if (!isConnected) {
-      setStep('upload');
-      setImage(null);
-      setResult("");
-      setError("");
-      setFadeOut(false);
-      setAncestryData([]);
-      setCarouselIndex(0);
-      setShowShareModal(false);
-    }
-  }, [isConnected]);
-
-  useEffect(() => {
-    if (image) {
-      const url = URL.createObjectURL(image);
-      setImageUrl(url);
-      return () => URL.revokeObjectURL(url);
-    } else {
-      setImageUrl(null);
-    }
-  }, [image]);
-
-  const handleDrop = async (files: File[]) => {
-    const file = files[0];
-    setImage(file);
-    setResult("");
-    setError("");
-    
-    // Start analysis immediately after upload
-    await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for better UX
-    triggerAnalysis(file);
-  };
-
-  // Removed reveal button functionality since analysis starts automatically
-  const handleReveal = () => {};
-
-  const triggerAnalysis = (file: File) => {
-    setLoading(true);
-    setProgress(10);
-    const formData = new FormData();
-    formData.append("file", file);
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/analyze-face", true);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        // Upload progress from 0-40%
-        setProgress(Math.round((event.loaded / event.total) * 40));
-      }
-    };
-
-    // Simulate analysis progress from 40-95%
-    let analysisProgress = 40;
-    const progressInterval = setInterval(() => {
-      if (analysisProgress < 95) {
-        analysisProgress += 1;
-        setProgress(analysisProgress);
-      } else {
-        clearInterval(progressInterval);
-      }
-    }, 100);
-    xhr.onload = () => {
-      clearInterval(progressInterval);
-      setProgress(100);
-      setLoading(false);
-      if (xhr.status === 200) {
-        const res = JSON.parse(xhr.responseText);
-        setResult(res.analysis);
-        setAncestryData(res.ancestryData || []); 
-        setStep('result');
-        setCarouselIndex(0);
-      } else {
-        setError("Failed to analyze image. Please try again.");
-        setStep('upload');
-      }
-    };
-    xhr.onerror = () => {
-      setLoading(false);
-      setError("Failed to analyze image. Please try again.");
-      setStep('upload');
-    };
-    xhr.send(formData);
-  };
-
-  // PDF download handler using premium PDF utility and pie chart image
-  const handleDownloadPDF = async () => {
-    console.log('Starting PDF download process');
-    
-    // Try to get the pie chart image as PNG
-    let pieChartDataUrl: string | undefined = undefined;
-    
-    // Wait a bit to ensure the chart is fully rendered
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const chartEl = document.querySelector(".ancestry-pie-chart-capture") as HTMLElement;
-    if (chartEl) {
-      console.log('Found chart element, attempting to capture');
-      try {
-        pieChartDataUrl = await chartToImage(chartEl);
-        console.log('Chart captured successfully, data URL length:', pieChartDataUrl?.length);
-      } catch (e) {
-        console.error('Failed to capture chart:', e);
-        // fallback: no chart image
-      }
-    } else {
-      console.warn('Chart element not found');
-    }
-    
-    // Import and call the PDF generation function
-    const { downloadAnalysisAsPDF } = await import('../utils/pdfUtils');
-    downloadAnalysisAsPDF(result, ancestryData, pieChartDataUrl);
-  };
-
-  const handleShare = (platform: 'twitter' | 'facebook' | 'copy') => {
-    const url = encodeURIComponent(window.location.href);
-    const message = encodeURIComponent("I just discovered my ancestry using this new AI app!");
-    if (platform === 'twitter') {
-      window.open(`https://twitter.com/intent/tweet?url=${url}&text=${message}`, '_blank');
-    } else if (platform === 'facebook') {
-      window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${message}`, '_blank');
-    } else if (platform === 'copy') {
-      navigator.clipboard.writeText(window.location.href);
-      setShowShareModal(false);
-      alert('Link copied!');
-    }
-  };
-
-  const handleNewReading = () => {
-    setStep('upload');
-    setImage(null);
-    setResult("");
-    setFadeOut(false);
-  };
-
-  const formattedCards = splitResultCards(cleanAndFormatResult(result));
-
-  const handleCardScroll = (e: React.UIEvent<HTMLDivElement>, idx: number) => {
-    // Removed the check that prevented navigation on the 2nd card
-    const el = e.target as HTMLDivElement;
-    // Scroll down for next
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 8) {
-      setTimeout(() => {
-        if (carouselIndex === idx && idx < carouselSlides.length - 1) {
-          setFadeOut(true);
-          setTimeout(() => {
-            setFadeOut(false);
-            setCarouselIndex(idx + 1);
-          }, 380);
-        }
-      }, 120);
-    }
-    // Scroll up for previous
-    if (el.scrollTop === 0 && idx > 0) {
-      setTimeout(() => {
-        if (carouselIndex === idx) {
-          setFadeOut(true);
-          setTimeout(() => {
-            setFadeOut(false);
-            setCarouselIndex(idx - 1);
-          }, 380);
-        }
-      }, 120);
-    }
-  };
-
-  const carouselSlides = [
-    <div key="reading1" className={`openai-card carousel-slide${fadeOut && carouselIndex === 0 ? ' fade-out' : ''} flex flex-col items-center justify-start min-h-[500px] py-12 bg-transparent shadow-none`}>
-      <h2 className="text-xl font-bold text-blue-400 mb-3 w-full text-center" style={{position:'relative', top: '-0.75rem'}}>Your Ancestry Reading</h2>
-      <div className="floating-result-text w-full max-w-2xl mx-auto text-base text-gray-800 font-mono bg-white/10 border-none shadow-none p-6 overflow-y-auto hide-scrollbar relative" style={{maxHeight:'420px', minHeight:'220px', boxShadow:'none'}} onScroll={e => handleCardScroll(e, 0)}>
-        {/* Format the report with blank lines between bullets and paragraphs, and remove any summary table if present */}
-        <div dangerouslySetInnerHTML={{__html: cleanAndFormatResult((formattedCards[0] || '').replace(/\| *Region\/Group *\| *Estimated Percentage *\| *Key Traits.*\|[\s\S]*?(\|.*\|.*\|.*\|\n?)+/, ''))}} />
-      </div>
-    </div>,
-    <div key="reading2" className={`openai-card carousel-slide${fadeOut && carouselIndex === 1 ? ' fade-out' : ''} flex flex-col items-center justify-start min-h-[500px] py-12 bg-transparent shadow-none`}>
-      <h2 className="text-xl font-bold text-blue-400 mb-3 w-full text-center" style={{position:'relative', top: '-0.75rem'}}>More Details</h2>
-      <div className="floating-result-text w-full max-w-2xl mx-auto text-base text-gray-800 font-mono bg-white/10 border-none shadow-none p-6 overflow-y-auto hide-scrollbar relative" style={{maxHeight:'420px', minHeight:'220px', boxShadow:'none'}} onScroll={e => handleCardScroll(e, 1)}>
-        {/* Format the report with blank lines between bullets and paragraphs, and remove any summary table if present */}
-        <div dangerouslySetInnerHTML={{__html: cleanAndFormatResult((formattedCards[1] || '').replace(/\| *Region\/Group *\| *Estimated Percentage *\| *Key Traits.*\|[\s\S]*?(\|.*\|.*\|.*\|\n?)+/, ''))}} />
-      </div>
-    </div>,
-    <div key="summary" className={`openai-card carousel-slide${fadeOut && carouselIndex === 2 ? ' fade-out' : ''} flex flex-col items-center justify-start min-h-[500px] py-12 bg-transparent shadow-none`}>
-      <h2 className="text-xl font-bold text-blue-400 mb-3 w-full text-center" style={{position:'relative', top: '-0.75rem'}}>Summary Table</h2>
-      <div className="floating-result-text w-full max-w-4xl mx-auto text-base text-gray-800 font-mono bg-white/10 border-none shadow-none p-8 overflow-y-auto hide-scrollbar relative" style={{maxWidth:'950px',maxHeight:'420px', minHeight:'220px', boxShadow:'none'}}>
-        {(() => {
-          const summaryTableMatch = result.match(/\| *Region\/Group *\| *Estimated Percentage *\| *Key Traits.*\|[\s\S]*?(\|.*\|.*\|.*\|\n?)+/);
-          if (summaryTableMatch) {
-            const tableMarkdown = summaryTableMatch[0];
-            const rows = tableMarkdown.trim().split(/\n/).filter(Boolean);
-            if (rows.length >= 2) {
-              const headerCells = rows[0].split('|').slice(1,-1).map(cell => cell.trim());
-              const bodyRows = rows.slice(2).map(row => row.split('|').slice(1,-1).map(cell => cell.trim()));
-              return (
-                <table style={{width:'100%',fontFamily:'var(--font-mono)',fontSize:'1.08rem',marginTop:8,marginBottom:8, borderCollapse:'separate', borderSpacing:'0 0.75rem'}}>
-                  <thead>
-                    <tr>
-                      {headerCells.map((cell, idx) => <th key={idx} style={{padding:'12px 18px',textAlign: idx===1?'right':'left', fontWeight:700, fontSize:'1.12rem', background:'#f5f6fa', borderBottom:'2px solid #e4e4e7', color:'#222'}}> {cell} </th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bodyRows.map((cells, ridx) => (
-                      <tr key={ridx} style={{background: ridx%2===0?'#f8fafc':'#fff', boxShadow:'0 1px 6px #e5e7eb33'}}>
-                        {cells.map((cell, cidx) => (
-                          <td key={cidx} style={{
-                            padding:'16px 18px',
-                            textAlign: cidx===1?'right':'left',
-                            fontWeight: cidx===1?600:400,
-                            fontSize: cidx===1?'1.12rem':'1.08rem',
-                            whiteSpace: 'pre-line',
-                            borderRadius: cidx===0 ? '12px 0 0 12px' : cidx===2 ? '0 12px 12px 0' : undefined,
-                            borderBottom: '1.5px solid #e4e4e7',
-                            background: 'inherit'
-                          }}>{cell}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              );
-            }
-          }
-          return null;
-        })()}
-      </div>
-    </div>,
-    <div key="piechart" className={`openai-card carousel-slide${fadeOut && carouselIndex === 3 ? ' fade-out' : ''} flex flex-col items-center justify-center min-h-[500px]`}>
-      <h2 className="text-xl font-bold text-blue-400 mb-3 w-full text-center" style={{position:'relative', top: '-0.75rem'}}>Ancestry Pie Chart</h2>
-      <div className="w-full max-w-4xl mx-auto flex flex-col items-center">
-        {/* Parse ancestry data from summary table in result, fallback to ancestryData */}
-        {(() => {
-          // Extract summary table from result (markdown table)
-          const tableMatch = result.match(/\| *Region\/Group *\| *Estimated Percentage *\| *Key Traits.*\|[\s\S]*?(\|.*\|.*\|.*\|\n?)+/);
-          if (tableMatch) {
-            const rows = tableMatch[0].trim().split(/\n/).filter(Boolean);
-            if (rows.length >= 3) {
-              // Parse rows to get regions and percentages
-              const data = rows.slice(2).map(row => {
-                const cells = row.split('|').slice(1,-1).map(cell => cell.trim());
-                const region = cells[0];
-                const percent = parseInt(cells[1].replace(/[^\d]/g, ''), 10);
-                return region && !isNaN(percent) ? { region, percent } : null;
-              }).filter((item): item is { region: string; percent: number } => item !== null);
-              if (data.length) {
-                return <AncestryPieChart data={data} />;
-              }
-            }
-          }
-          // Fallback to ancestryData if no table found
-          if (ancestryData && ancestryData.length) {
-            return <AncestryPieChart data={ancestryData} />;
-          }
-          return <div className="text-gray-500 text-center mt-6">No ancestry data available for visualization.</div>;
-        })()}
-      </div>
-    </div>,
-  ];
-
-  // Create a ref to track if analysis has been triggered to prevent multiple triggers
-  const analysisTriggeredRef = React.useRef(false);
-  
-  // Safe trigger function that prevents multiple analysis calls
-  const safeTriggerAnalysis = React.useCallback((file: File) => {
-    if (analysisTriggeredRef.current) {
-      console.log('[PAYMENT DEBUG] Analysis already triggered, ignoring duplicate call');
-      return;
-    }
-    
-    analysisTriggeredRef.current = true;
-    setStep('processing');
-    triggerAnalysis(file);
-  }, []);
-  
-  // Reset the analysis triggered flag when returning to upload step
-  useEffect(() => {
-    if (step === 'upload') {
-      analysisTriggeredRef.current = false;
-    }
-  }, [step]);
-
-  // We've removed all other payment detection methods and will rely solely on
-  // the onStatus handler from the Checkout component
-
   return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-[#f8f9fa] to-[#e5e7eb] py-12 relative">
-        {/* Wallet connect button top right, round border, full dropdown */}
-        <div className="absolute top-4 right-4 md:top-6 md:right-8 z-50">
-          <Wallet>
-            <ConnectWallet
-              className={`ock-connect-glass px-4 py-2 rounded-full font-bold text-white text-base shadow-lg border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-700/80 backdrop-blur-lg bg-opacity-70 hover:bg-gray-900/80 transition-all duration-200 focus:outline-none ${isConnected ? 'from-green-600 to-indigo-600 border-green-400/30' : 'from-indigo-600 to-green-600 border-indigo-500/30'}`}
-              disconnectedLabel="Connect Wallet"
-            >
-              {isConnected && (
-                <div className="mr-2 relative">
-                  <motion.div 
-                    animate={{ scale: [1, 1.5, 1] }}
-                    transition={{ repeat: Infinity, duration: 2 }}
-                    className="absolute w-2 h-2 bg-green-400 rounded-full right-0 top-0 opacity-70"
-                  ></motion.div>
-                  <div className="absolute w-2 h-2 bg-green-500 rounded-full right-0 top-0"></div>
-                </div>
-              )}
-              <Avatar className="h-6 w-6" />
-              <ConnectWalletText>
-                {isConnected ? '' : 'Connect Wallet'}
-              </ConnectWalletText>
-              <Name className="font-medium" />
-            </ConnectWallet>
-            <WalletDropdown>
-              <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
-                <Avatar className="h-8 w-8" />
-                <Name className="font-bold ml-2" />
-                <Address className="text-gray-400 ml-2" />
-              </Identity>
-              <WalletDropdownLink
-                className="py-3 rounded-xl flex items-center bg-white/10 hover:bg-white/20 text-black font-medium pl-4 pr-2 my-1 transition-all duration-200 hover:shadow-lg hover:translate-y-[-2px]"
-                icon="wallet"
-                href="https://keys.coinbase.com"
+    <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.18),_transparent_55%),radial-gradient(circle_at_bottom,_rgba(129,140,248,0.12),_transparent_55%)]" />
+      <div className="relative mx-auto flex max-w-6xl flex-col gap-16 px-4 pb-24 pt-24 sm:px-8">
+        <header className="rounded-3xl border border-slate-700/40 bg-slate-900/60 p-10 text-center shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-3xl flex-col gap-6">
+            <PillBadge tone="sky">Opal-style builder for Base</PillBadge>
+            <h1 className="text-balance text-4xl font-semibold text-white sm:text-5xl lg:text-6xl">
+              Upload any site. Drag Base primitives. Let the agent ship the diff.
+            </h1>
+            <p className="text-pretty text-base text-slate-300/90 sm:text-lg">
+              Awesome idea—now a concrete blueprint. This studio ingests any frontend, detects the stack, and lets non-developers drop Wallet, Pay, Swap, and Mint blocks. The agent wires everything automatically using Base OnchainKit and Base Pay best practices.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <Link
+                href="#get-started"
+                className="inline-flex items-center gap-2 rounded-full border border-sky-500/60 bg-sky-500/20 px-6 py-3 text-sm font-semibold text-sky-100 transition hover:border-sky-400/80 hover:bg-sky-500/30"
               >
-                Wallet
-              </WalletDropdownLink>
-              {(() => {
-  const projectId = process.env.NEXT_PUBLIC_CDP_PROJECT_ID || '';
-  const { address } = useAccount();
-  if (!address) return null; // Only show FundButton if address is present
-  const onrampBuyUrl = getOnrampBuyUrl({
-    projectId,
-    addresses: { [address]: ['base'] },
-    assets: ['USDC'],
-    presetFiatAmount: 20,
-    fiatCurrency: 'USD',
-    // Optionally, set redirectUrl: window.location.origin
-  });
-  return (
-    <button
-      type="button"
-      className="w-full py-3 rounded-xl flex items-center justify-start bg-white/10 hover:bg-white/20 text-black font-medium transition-all duration-200 my-1 pl-4 pr-2 hover:shadow-lg hover:translate-y-[-2px]"
-      onClick={() => window.open(onrampBuyUrl, '_blank', 'noopener,noreferrer')}
-    >
-      <FaPlus className="mr-3 text-xl" />
-      <span>Funds</span>
-    </button>
-  );
-})()}
-              <div className="pt-2 pb-2">
-                <WalletDropdownDisconnect className="w-full bg-white/10 hover:bg-white/20 text-black font-medium py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:translate-y-[-2px]" />
-              </div>
-            </WalletDropdown>
-          </Wallet>
-        </div>
-
-        {/* Wallet connection overlay - only shown when wallet is not connected AND component is mounted */}
-        {mounted && !isConnected && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center">
-            <div className="max-w-md mx-auto bg-[#23252b]/90 p-8 rounded-3xl shadow-2xl border border-indigo-500/30 text-center">
-              <div className="flex items-center justify-center mb-6">
-                <svg className="w-10 h-10 text-indigo-400 mr-3 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2m0-10v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4m0-5h7v2a3 3 0 01.105 2.967l-1.178 9a2 2 0 01-2 1.846V11a2 2 0 012-2h6a2 2 0 012 2v3" />
-                </svg>
-                <h2 className="text-2xl font-bold text-white">Connect Your Wallet</h2>
-              </div>
-              <p className="text-gray-300 mb-8">
-                Please connect your wallet using the button in the top right corner to access AI Ancestry and reveal your roots.
-              </p>
-              {/* <div className="animate-bounce bg-indigo-600 p-2 w-10 h-10 ring-1 ring-indigo-400/50 shadow-lg rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                </svg>
-              </div> */}
-              {/* <div className="flex justify-center">
-                <div className="animate-bounce bg-indigo-600 p-2 w-10 h-10 ring-1 ring-indigo-400/50 shadow-lg rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                  </svg>
+                Start building
+                <FiArrowRight className="text-lg" />
+              </Link>
+              <Link
+                href="https://docs.base.org/"
+                target="_blank"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-700/60 px-6 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500/60 hover:bg-slate-900/60"
+              >
+                Base docs
+              </Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {[
+                {
+                  icon: <FiUploadCloud className="text-2xl text-sky-300" />, 
+                  title: "Upload → preview",
+                  copy: "Drop a zip or Git URL. We boot a preview in seconds with zero config.",
+                },
+                {
+                  icon: <FiCpu className="text-2xl text-sky-300" />,
+                  title: "AI agents, visible steps",
+                  copy: "Every edit surfaces a plan, diff, and rerunnable step log—Opal style.",
+                },
+                {
+                  icon: <FiGitBranch className="text-2xl text-sky-300" />,
+                  title: "Branch per session",
+                  copy: "Auto-commits your diff with PR notes so teams can review and merge fast.",
+                },
+              ].map((item) => (
+                <div key={item.title} className="rounded-2xl border border-slate-800/60 bg-slate-950/60 p-4 text-left">
+                  <div className="flex items-center gap-3">
+                    {item.icon}
+                    <p className="text-sm font-semibold text-white">{item.title}</p>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-300/80">{item.copy}</p>
                 </div>
-              </div> */}
+              ))}
             </div>
           </div>
-        )}
+        </header>
 
-        {/* Only show content when mounted and wallet is connected */}
-        {mounted && (
-          <>
-            {/* Only show upload/pay card if step is 'upload' and wallet is connected */}
-            {isConnected && step === 'upload' && (
-              <div className="w-full max-w-2xl mx-auto flex justify-center">
-                <div className="openai-card flex flex-col items-center animate-fade-in text-center w-full max-w-lg mx-auto p-4 md:p-6 bg-[#23252b]/80 rounded-[2.5rem]">
-                  <div className="flex flex-col items-center w-full justify-center">
-                    {loading ? (
-                      <div className="w-full flex flex-col items-center justify-center py-8">
-                        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-400 mb-6"></div>
-                        <span className="text-3xl font-bold text-blue-500 mb-2 text-center" style={{ letterSpacing: '-0.5px' }}>Uploading & Analyzing...</span>
-                        <span className="text-lg text-gray-300 text-center px-4">Please wait while we process your photo and generate your ancestry reading.</span>
-                      </div>
-                    ) : (
-                      <div
-                        className="relative w-full flex justify-center items-center"
-                        style={{ minHeight: '320px' }}
-                      >
-                        <div
-                          style={{
-                            width: '100%',
-                            height: '320px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'opacity 0.4s',
-                            position: 'relative',
-                          }}
-                          onClick={e => {
-                            if (image) {
-                              setImage(null);
-                              setResult("");
-                              setError("");
-                            }
-                          }}
-                          title={image ? 'Click to upload a new image' : undefined}
-                        >
-                          <UploadArea
-                            onDrop={async (files) => {
-                              const file = files[0];
-                              setImage(file);
-                              // Start analysis immediately after image is set
-                              await new Promise(resolve => setTimeout(resolve, 100));
-                              triggerAnalysis(file);
-                            }}
-                            isUploading={loading}
-                            hasFile={!!image}
-                            imageUrl={imageUrl || undefined}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {error && (
-                      <div className="w-full mt-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg">
-                        <p className="text-red-400 text-center">{error}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-            {step === 'processing' && (
-              <div className="openai-card flex flex-col items-center justify-center min-h-[420px] animate-fade-in text-center">
-                {/* Move h2 slightly higher */}
-                <h2 className="text-2xl font-bold text-blue-500 mb-6 mt-2" style={{position:'relative', top: '-0.75rem'}}>Analyzing Image...</h2>
-                <div className="w-full max-w-md px-4 mb-4 mt-2">
-                  <div className="h-6 w-6 md:h-16 md:w-16 bg-blue-500 rounded-full transition-all duration-300 ease-out flex items-center justify-center mx-auto" style={{ width: 96, height: 96, minWidth: 48, minHeight: 48 }}>
-                    <span className="text-white text-sm font-semibold">{progress}%</span>
-                  </div>
-                </div>
-                <p className="text-gray-400 text-base mt-2">Please wait while we analyze your image for ancestry features.</p>
-              </div>
-            )}
-            {/* Always render result panel, only show content if step is 'result' */}
-            {step === 'result' && (
-              <div className="relative">
-                {/* Remove the 'Your Ancestry Reading' heading above the carousel */}
-                {carouselSlides[carouselIndex]}
-                {/* Carousel dots */}
-                <div className="flex justify-center gap-2 mt-3">
-                  {carouselSlides.map((_, idx) => (
-                    <button
-                      key={idx}
-                      className={`carousel-dot-btn${carouselIndex === idx ? ' active' : ''}`}
-                      onClick={() => setCarouselIndex(idx)}
-                      aria-label={`Show Card ${idx+1}`}
-                      type="button"
-                    ></button>
-                  ))}
-                </div>
-                {/* Download/Share/New Reading buttons at the bottom, OpenAI.fm style */}
-                <div className="flex flex-wrap gap-6 justify-center items-center mt-8">
-                  <button className="openai-btn openai-btn-light flex items-center gap-1 px-2 py-1 text-sm" onClick={handleDownloadPDF}>
-                    <FaFilePdf className="text-sm" /> DOWNLOAD
-                  </button>
-                  <button className="openai-btn openai-btn-dark flex items-center gap-1 px-2 py-1 text-sm" onClick={()=>setShowShareModal(true)}>
-                    <FaShare className="text-sm" /> SHARE
-                  </button>
-                  <button className="openai-btn openai-btn-light flex items-center gap-1 px-2 py-1 text-sm" onClick={handleNewReading}>
-                    NEW READING
-                  </button>
-                </div>
-              </div>
-            )}
-            {showShareModal && (
-              <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-                <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-6">
-                  <h3 className="font-bold text-lg mb-2">Share your result</h3>
-                  <div className="flex gap-4">
-                    <button className="openai-btn openai-btn-dark flex items-center gap-2" onClick={()=>handleShare('twitter')}><FaTwitter /> Twitter</button>
-                    <button className="openai-btn openai-btn-dark flex items-center gap-2" onClick={()=>handleShare('facebook')}><FaFacebook /> Facebook</button>
-                    <button className="openai-btn openai-btn-light flex items-center gap-2" onClick={()=>handleShare('copy')}>Copy Link</button>
-                  </div>
-                  <button className="text-blue-400 mt-3 underline" onClick={()=>setShowShareModal(false)}>Cancel</button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+        <BuilderPreview components={builderComponents} />
+
+        <StackStrategyTabs strategies={stackStrategies} />
+
+        <ComponentLibrary components={libraryComponents} />
+
+        <WorkflowConsole steps={workflowSteps} />
+
+        <SecurityChecklist safeguards={safeguards} />
+
+        <MilestoneTimeline milestones={milestones} />
+
+        <section
+          id="get-started"
+          className="rounded-3xl border border-slate-700/40 bg-slate-900/60 p-10 text-center shadow-2xl shadow-slate-950/40 backdrop-blur-xl"
+        >
+          <SectionHeading
+            title="Ready to build the Base mini-app studio?"
+            description="Hook up your Base credentials, invite your team, and ship wallet-enabled experiences in hours, not weeks."
+          />
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+            <Link
+              href="mailto:founders@awesomebuilder.xyz"
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-500/60 bg-emerald-500/20 px-6 py-3 text-sm font-semibold text-emerald-100 transition hover:border-emerald-400/80 hover:bg-emerald-500/30"
+            >
+              Book a walkthrough
+              <FiArrowRight className="text-lg" />
+            </Link>
+            <Link
+              href="https://blog.google/technology/developers/introducing-opal/"
+              target="_blank"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-700/60 px-6 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500/60 hover:bg-slate-900/60"
+            >
+              Learn from Opal
+            </Link>
+          </div>
+        </section>
       </div>
+    </main>
   );
 }
